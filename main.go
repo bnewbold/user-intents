@@ -12,7 +12,6 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
-	"github.com/bluesky-social/indigo/atproto/crypto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 
@@ -36,17 +35,6 @@ func main() {
 				Name:    "hostname",
 				Usage:   "public host name for this client (if not localhost dev mode)",
 				EnvVars: []string{"CLIENT_HOSTNAME"},
-			},
-			&cli.StringFlag{
-				Name:    "client-secret-key",
-				Usage:   "confidential client secret key. should be P-256 private key in multibase encoding",
-				EnvVars: []string{"CLIENT_SECRET_KEY"},
-			},
-			&cli.StringFlag{
-				Name:    "client-secret-key-id",
-				Usage:   "key id for client-secret-key",
-				Value:   "primary",
-				EnvVars: []string{"CLIENT_SECRET_KEY_ID"},
 			},
 		},
 	}
@@ -72,12 +60,14 @@ var tmplHome = template.Must(template.Must(template.New("home.html").Parse(tmplB
 var tmplLoginText string
 var tmplLogin = template.Must(template.Must(template.New("login.html").Parse(tmplBaseText)).Parse(tmplLoginText))
 
-//go:embed "post.html"
-var tmplPostText string
-var tmplPost = template.Must(template.Must(template.New("post.html").Parse(tmplBaseText)).Parse(tmplPostText))
+//go:embed "intents.html"
+var tmplIntentsText string
+var tmplIntents = template.Must(template.Must(template.New("intents.html").Parse(tmplBaseText)).Parse(tmplIntentsText))
 
-func (s *Server) Homepage(w http.ResponseWriter, r *http.Request) {
-	tmplHome.Execute(w, nil)
+type WebInfo struct {
+	DID string
+	//Handle string
+	Declaration *Declaration
 }
 
 func runServer(cctx *cli.Context) error {
@@ -101,16 +91,6 @@ func runServer(cctx *cli.Context) error {
 		)
 	}
 
-	// If a client secret key is provided (as a multibase string), turn this in to a confidential client
-	if cctx.String("client-secret-key") != "" && hostname != "" {
-		priv, err := crypto.ParsePrivateMultibase(cctx.String("client-secret-key"))
-		if err != nil {
-			return err
-		}
-		config.AddClientSecret(priv, cctx.String("client-secret-key-id"))
-		slog.Info("configuring confidential OAuth client")
-	}
-
 	oauthClient := oauth.NewClientApp(&config, oauth.NewMemStore())
 
 	srv := Server{
@@ -125,10 +105,9 @@ func runServer(cctx *cli.Context) error {
 	http.HandleFunc("GET /oauth/login", srv.OAuthLogin)
 	http.HandleFunc("POST /oauth/login", srv.OAuthLogin)
 	http.HandleFunc("GET /oauth/callback", srv.OAuthCallback)
-	http.HandleFunc("GET /oauth/refresh", srv.OAuthRefresh)
 	http.HandleFunc("GET /oauth/logout", srv.OAuthLogout)
-	http.HandleFunc("GET /bsky/post", srv.Post)
-	http.HandleFunc("POST /bsky/post", srv.Post)
+	http.HandleFunc("GET /intents", srv.UpdateIntents)
+	http.HandleFunc("POST /intents", srv.UpdateIntents)
 
 	slog.Info("starting http server", "bind", bind)
 	if err := http.ListenAndServe(bind, nil); err != nil {
@@ -160,10 +139,7 @@ func (s *Server) ClientMetadata(w http.ResponseWriter, r *http.Request) {
 
 	scope := "atproto transition:generic"
 	meta := s.OAuth.Config.ClientMetadata(scope)
-	if s.OAuth.Config.IsConfidential() {
-		meta.JWKSUri = strPtr(fmt.Sprintf("https://%s/oauth/jwks.json", r.Host))
-	}
-	meta.ClientName = strPtr("indigo atp-oauth-demo")
+	meta.ClientName = strPtr("AI-PREF / Bluesky Demo App")
 	meta.ClientURI = strPtr(fmt.Sprintf("https://%s", r.Host))
 
 	// internal consistency check
@@ -187,6 +163,15 @@ func (s *Server) JWKS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) Homepage(w http.ResponseWriter, r *http.Request) {
+	did := s.currentSessionDID(r)
+	if did != nil {
+		tmplHome.Execute(w, WebInfo{DID: did.String()})
+		return
+	}
+	tmplHome.Execute(w, nil)
 }
 
 func (s *Server) OAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -237,32 +222,7 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("login successful", "did", sessData.AccountDID.String())
-	http.Redirect(w, r, "/bsky/post", http.StatusFound)
-}
-
-func (s *Server) OAuthRefresh(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	did := s.currentSessionDID(r)
-	if did == nil {
-		// TODO: suppowed to set a WWW header; and could redirect?
-		http.Error(w, "not authenticated", http.StatusUnauthorized)
-		return
-	}
-
-	oauthSess, err := s.OAuth.ResumeSession(ctx, *did)
-	if err != nil {
-		http.Error(w, "not authenticated", http.StatusUnauthorized)
-		return
-	}
-
-	if err := oauthSess.RefreshTokens(ctx); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	s.OAuth.Store.SaveSession(ctx, *oauthSess.Data)
-	slog.Info("refreshed tokens")
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, "/intents", http.StatusFound)
 }
 
 func (s *Server) OAuthLogout(w http.ResponseWriter, r *http.Request) {
@@ -280,15 +240,21 @@ func (s *Server) OAuthLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	slog.Info("in post handler")
-
-	if r.Method != "POST" {
-		tmplPost.Execute(w, nil)
-		return
+func parseTriState(raw string) *bool {
+	switch raw {
+	case "allow":
+		v := true
+		return &v
+	case "disallow":
+		v := false
+		return &v
+	default:
+		return nil
 	}
+}
+
+func (s *Server) UpdateIntents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	did := s.currentSessionDID(r)
 	if did == nil {
@@ -303,28 +269,70 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := oauthSess.APIClient()
+	info := WebInfo{
+		DID: did.String(),
+	}
+
+	p := map[string]any{
+		"repo":       did.String(),
+		"collection": "org.user-intents.demo.declaration",
+		"rkey":       "self",
+	}
+	resp := GetDeclarationResp{}
+	err = c.Get(ctx, "com.atproto.repo.getRecord", p, &resp)
+	if err != nil {
+		slog.Info("could not fetch existing declaration", "err", err)
+	}
+
+	if r.Method != "POST" {
+		info.Declaration = &resp.Value
+		tmplIntents.Execute(w, info)
+		return
+	}
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, fmt.Errorf("parsing form data: %w", err).Error(), http.StatusBadRequest)
 		return
 	}
-	text := r.PostFormValue("post_text")
 
-	body := map[string]any{
-		"repo":       c.AccountDID.String(),
-		"collection": "app.bsky.feed.post",
-		"record": map[string]any{
-			"$type":     "app.bsky.feed.post",
-			"text":      text,
-			"createdAt": syntax.DatetimeNow(),
+	// TODO: have this not clobber current timestamps
+	now := syntax.DatetimeNow().String()
+	decl := Declaration{
+		Type: "org.user-intents.demo.declaration",
+		UpdatedAt: now,
+		SyntheticContentGeneration: &DeclarationIntent{
+			Value: parseTriState(r.PostFormValue("syntheticContentGeneration")),
+			UpdatedAt: now,
+		},
+		PublicAccessArchive: &DeclarationIntent{
+			Value: parseTriState(r.PostFormValue("publicAccessArchive")),
+			UpdatedAt: now,
+		},
+		BulkDataset: &DeclarationIntent{
+			Value: parseTriState(r.PostFormValue("bulkDataset")),
+			UpdatedAt: now,
+		},
+		ProtocolBridging: &DeclarationIntent{
+			Value: parseTriState(r.PostFormValue("protocolBridging")),
+			UpdatedAt: now,
 		},
 	}
 
-	slog.Info("attempting post...", "text", text)
-	if err := c.Post(ctx, "com.atproto.repo.createRecord", body, nil); err != nil {
-		http.Error(w, fmt.Errorf("posting failed: %w", err).Error(), http.StatusBadRequest)
+	//nope := false
+	body := PutDeclarationBody{
+		Repo:       did.String(),
+		Collection: "org.user-intents.demo.declaration",
+		Rkey:       "self",
+		// XXX: Validate: &nope,
+		Record: decl,
+	}
+
+	slog.Info("updating intents", "did", did, "declaration", decl)
+	if err := c.Post(ctx, "com.atproto.repo.putRecord", body, nil); err != nil {
+		slog.Info("failed to update intents record", "err", err)
+		http.Error(w, fmt.Errorf("update failed: %w", err).Error(), http.StatusBadRequest)
 		return
 	}
 
-	http.Redirect(w, r, "/bsky/post", http.StatusFound)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
