@@ -1,0 +1,15 @@
+{
+  "$type": "org.user-intents.demo.declaration",
+  "updatedAt": "2025-02-20T21:37:20.362Z",
+  "publicAccessArchive": {
+    "allow": true,
+    "updatedAt": "2025-02-20T21:37:20.362Z"
+  },
+  "syntheticContentGeneration": {
+    "allow": true,
+    "updatedAt": "2025-02-20T21:37:20.362Z"
+  },
+  "protocolBridging": {
+    "updatedAt": "2019-02-20T22:44:20.000Z"
+  }
+}
