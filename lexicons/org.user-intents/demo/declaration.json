@@ -42,7 +42,7 @@
       "type": "object",
       "required": ["updatedAt"],
       "properties": {
-        "value": {
+        "allow": {
           "type": "boolean",
           "description": "indicates user intent for reuse. Note that this field is optional, and thus tri-state (true, false, undefined)"
         },

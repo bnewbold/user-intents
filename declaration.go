@@ -16,7 +16,7 @@ type PutDeclarationBody struct {
 }
 
 type DeclarationIntent struct {
-	Value     *bool  `json:"value,omitempty"`
+	Allow *bool  `json:"allow,omitempty"`
 	UpdatedAt string `json:"updatedAt"`
 }
 

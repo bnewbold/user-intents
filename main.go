@@ -301,19 +301,19 @@ func (s *Server) UpdateIntents(w http.ResponseWriter, r *http.Request) {
 		Type: "org.user-intents.demo.declaration",
 		UpdatedAt: now,
 		SyntheticContentGeneration: &DeclarationIntent{
-			Value: parseTriState(r.PostFormValue("syntheticContentGeneration")),
+			Allow: parseTriState(r.PostFormValue("syntheticContentGeneration")),
 			UpdatedAt: now,
 		},
 		PublicAccessArchive: &DeclarationIntent{
-			Value: parseTriState(r.PostFormValue("publicAccessArchive")),
+			Allow: parseTriState(r.PostFormValue("publicAccessArchive")),
 			UpdatedAt: now,
 		},
 		BulkDataset: &DeclarationIntent{
-			Value: parseTriState(r.PostFormValue("bulkDataset")),
+			Allow: parseTriState(r.PostFormValue("bulkDataset")),
 			UpdatedAt: now,
 		},
 		ProtocolBridging: &DeclarationIntent{
-			Value: parseTriState(r.PostFormValue("protocolBridging")),
+			Allow: parseTriState(r.PostFormValue("protocolBridging")),
 			UpdatedAt: now,
 		},
 	}
