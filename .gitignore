@@ -19,6 +19,7 @@ src/build/
 *.db
 /data/
 test-coverage.out
+.env
 
 # Don't ignore this file itself, or other specific dotfiles
 !.gitignore
