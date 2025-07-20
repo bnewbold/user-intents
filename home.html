@@ -1,3 +1,7 @@
 {{ define "content" }}
-This is home!
+<p>This is a demo tool which allows atproto accounts to configure a reuse declaration for their public data. You can read more about this atproo mechanism in the <a href="https://github.com/bluesky-social/proposals/tree/main/0008-user-intents">"User Intents for Data Reuse" proposal</a> from March 2025. Any account in the atproto network (including Bluesky accounts) can use this tool via OAuth. The source code for this demo is linked above.
+
+<p>This demo was originally created at the <a href="https://www.ietf.org/meeting/123/">IETF 123 Hackathon</a> to show how these preference declarations can be used to set a `Content-Usage` HTTP header when accessing Bluesky profile information on the web. It maps the atproto declaration to the <a href="https://ietf-wg-aipref.github.io/drafts/draft-ietf-aipref-vocab.html">draft aipref vocabulary</a> and uses the <a href="https://ietf-wg-aipref.github.io/drafts/draft-ietf-aipref-attach.html">draft aipref HTTP header attachment mechanism</a>.
+
+<p>A companion demo of the Bluesky app making use of these records is online (for now) at <a href="https://social-app-pr-8676.onrender.com/">social-app-pr-8676.onrender.com</a>. You do not need to log in; simply browse to a public profile page. The source code for that demo is available <a href="https://github.com/bluesky-social/social-app/pull/8676">as a PR on Github</a>.
 {{ end }}
