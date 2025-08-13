@@ -12,15 +12,10 @@
 <header>
   <hgroup>
     <h1>ATProto User Intents Demo</h1>
-    {{ if false }}
-    <!-- XXX -->
-    <p>Hello <span style="font-family: monospace;">@{{ "handle" }}</span>!</p>
-    {{ end }}
   </hgroup>
   <nav>
     <ul>
-    {{ if false }}
-      <!-- XXX -->
+    {{ if . }}
       <li><a href="/intents">Configure Intents</a>
       <li><a href="/oauth/logout">Logout</a>
     {{ else }}
@@ -29,6 +24,9 @@
       <li><a href="https://tangled.sh/@bnewbold.net/user-intents">Code</a>
     </ul>
   </nav>
+    {{ if . }}
+    <p>Hello <span style="font-family: monospace; font-weight: bold;">{{ .DID }}</span></p>
+    {{ end }}
 </header>
 <main>
   <section class="content">

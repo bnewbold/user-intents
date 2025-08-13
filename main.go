@@ -72,7 +72,7 @@ type WebInfo struct {
 
 func runServer(cctx *cli.Context) error {
 
-	scope := "atproto transition:generic"
+	scopes := []string{"atproto", "transition:generic"}
 	bind := ":8080"
 
 	// TODO: localhost dev mode if hostname is empty
@@ -81,13 +81,14 @@ func runServer(cctx *cli.Context) error {
 	if hostname == "" {
 		config = oauth.NewLocalhostConfig(
 			fmt.Sprintf("http://127.0.0.1%s/oauth/callback", bind),
-			scope,
+			scopes,
 		)
 		slog.Info("configuring localhost OAuth client", "CallbackURL", config.CallbackURL)
 	} else {
 		config = oauth.NewPublicConfig(
 			fmt.Sprintf("https://%s/oauth/client-metadata.json", hostname),
 			fmt.Sprintf("https://%s/oauth/callback", hostname),
+			scopes,
 		)
 	}
 
@@ -116,18 +117,22 @@ func runServer(cctx *cli.Context) error {
 	return nil
 }
 
-func (s *Server) currentSessionDID(r *http.Request) *syntax.DID {
+func (s *Server) currentSessionDID(r *http.Request) (*syntax.DID, string) {
 	sess, _ := s.CookieStore.Get(r, "oauth-demo")
 	accountDID, ok := sess.Values["account_did"].(string)
 	if !ok || accountDID == "" {
-		return nil
+		return nil, ""
 	}
 	did, err := syntax.ParseDID(accountDID)
 	if err != nil {
-		return nil
+		return nil, ""
+	}
+	sessionID, ok := sess.Values["session_id"].(string)
+	if !ok || sessionID == "" {
+		return nil, ""
 	}
 
-	return &did
+	return &did, sessionID
 }
 
 func strPtr(raw string) *string {
@@ -137,8 +142,7 @@ func strPtr(raw string) *string {
 func (s *Server) ClientMetadata(w http.ResponseWriter, r *http.Request) {
 	slog.Info("client metadata request", "url", r.URL, "host", r.Host)
 
-	scope := "atproto transition:generic"
-	meta := s.OAuth.Config.ClientMetadata(scope)
+	meta := s.OAuth.Config.ClientMetadata()
 	meta.ClientName = strPtr("AI-PREF / Bluesky Demo App")
 	meta.ClientURI = strPtr(fmt.Sprintf("https://%s", r.Host))
 
@@ -166,7 +170,7 @@ func (s *Server) JWKS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Homepage(w http.ResponseWriter, r *http.Request) {
-	did := s.currentSessionDID(r)
+	did, _ := s.currentSessionDID(r)
 	if did != nil {
 		tmplHome.Execute(w, WebInfo{DID: did.String()})
 		return
@@ -216,6 +220,7 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// create signed cookie session, indicating account DID
 	sess, _ := s.CookieStore.Get(r, "oauth-demo")
 	sess.Values["account_did"] = sessData.AccountDID.String()
+	sess.Values["session_id"] = sessData.SessionID
 	if err := sess.Save(r, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -226,7 +231,14 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) OAuthLogout(w http.ResponseWriter, r *http.Request) {
-	// XXX: delete session from auth store
+
+	// delete session from auth store
+	did, sessionID := s.currentSessionDID(r)
+	if did != nil {
+		if err := s.OAuth.Store.DeleteSession(r.Context(), *did, sessionID); err != nil {
+			slog.Error("failed to delete session", "did", did, "err", err)
+		}
+	}
 
 	// wipe all secure cookie session data
 	sess, _ := s.CookieStore.Get(r, "oauth-demo")
@@ -256,14 +268,14 @@ func parseTriState(raw string) *bool {
 func (s *Server) UpdateIntents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	did := s.currentSessionDID(r)
+	did, sessionID := s.currentSessionDID(r)
 	if did == nil {
 		// TODO: suppowed to set a WWW header; and could redirect?
 		http.Error(w, "not authenticated", http.StatusUnauthorized)
 		return
 	}
 
-	oauthSess, err := s.OAuth.ResumeSession(ctx, *did)
+	oauthSess, err := s.OAuth.ResumeSession(ctx, *did, sessionID)
 	if err != nil {
 		http.Error(w, "not authenticated", http.StatusUnauthorized)
 		return
@@ -298,22 +310,22 @@ func (s *Server) UpdateIntents(w http.ResponseWriter, r *http.Request) {
 	// TODO: have this not clobber current timestamps
 	now := syntax.DatetimeNow().String()
 	decl := Declaration{
-		Type: "org.user-intents.demo.declaration",
+		Type:      "org.user-intents.demo.declaration",
 		UpdatedAt: now,
 		SyntheticContentGeneration: &DeclarationIntent{
-			Allow: parseTriState(r.PostFormValue("syntheticContentGeneration")),
+			Allow:     parseTriState(r.PostFormValue("syntheticContentGeneration")),
 			UpdatedAt: now,
 		},
 		PublicAccessArchive: &DeclarationIntent{
-			Allow: parseTriState(r.PostFormValue("publicAccessArchive")),
+			Allow:     parseTriState(r.PostFormValue("publicAccessArchive")),
 			UpdatedAt: now,
 		},
 		BulkDataset: &DeclarationIntent{
-			Allow: parseTriState(r.PostFormValue("bulkDataset")),
+			Allow:     parseTriState(r.PostFormValue("bulkDataset")),
 			UpdatedAt: now,
 		},
 		ProtocolBridging: &DeclarationIntent{
-			Allow: parseTriState(r.PostFormValue("protocolBridging")),
+			Allow:     parseTriState(r.PostFormValue("protocolBridging")),
 			UpdatedAt: now,
 		},
 	}
@@ -323,8 +335,7 @@ func (s *Server) UpdateIntents(w http.ResponseWriter, r *http.Request) {
 		Repo:       did.String(),
 		Collection: "org.user-intents.demo.declaration",
 		Rkey:       "self",
-		// XXX: Validate: &nope,
-		Record: decl,
+		Record:     decl,
 	}
 
 	slog.Info("updating intents", "did", did, "declaration", decl)

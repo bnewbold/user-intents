@@ -16,7 +16,7 @@ type PutDeclarationBody struct {
 }
 
 type DeclarationIntent struct {
-	Allow *bool  `json:"allow,omitempty"`
+	Allow     *bool  `json:"allow,omitempty"`
 	UpdatedAt string `json:"updatedAt"`
 }
 
@@ -25,6 +25,6 @@ type Declaration struct {
 	UpdatedAt                  string             `json:"updatedAt,omitempty"`
 	SyntheticContentGeneration *DeclarationIntent `json:"syntheticContentGeneration,omitempty"`
 	PublicAccessArchive        *DeclarationIntent `json:"publicAccessArchive,omitempty"`
-	BulkDataset *DeclarationIntent `json:"bulkDataset,omitempty"`
+	BulkDataset                *DeclarationIntent `json:"bulkDataset,omitempty"`
 	ProtocolBridging           *DeclarationIntent `json:"protocolBridging,omitempty"`
 }
