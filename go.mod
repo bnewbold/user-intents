@@ -3,7 +3,7 @@ module tangled.sh/bnewbold.net/user-intents
 go 1.24.4
 
 require (
-	github.com/bluesky-social/indigo v0.0.0-20250812204950-e303f0977adb
+	github.com/bluesky-social/indigo v0.0.0-20250813002524-42e2d5b7f598
 	github.com/gorilla/sessions v1.2.1
 	github.com/joho/godotenv v1.5.1
 	github.com/urfave/cli/v2 v2.25.7
