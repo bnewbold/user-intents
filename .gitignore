@@ -21,6 +21,8 @@ src/build/
 test-coverage.out
 .env
 
+/user-intents
+
 # Don't ignore this file itself, or other specific dotfiles
 !.gitignore
 !.github/
