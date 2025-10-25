@@ -2,7 +2,7 @@
 ATProto User Intents / AI-PREF Demo
 ===================================
 
-- Git repo: https://tangled.sh/@bnewbold.net/user-intents
+- Git repo: https://tangled.org/bnewbold.net/user-intents
 - ATProto User Intents config web app: https://demo.user-intents.org
 - Bluesky app with AI-PREF headers patch: https://social-app-pr-8676.onrender.com/
 - Tool for inspecting repo records: https://astrolabe.at/at/alt.robocracy.org/org.user-intents.demo.declaration/self
